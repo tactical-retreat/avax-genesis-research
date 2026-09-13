@@ -42,11 +42,12 @@ thousands of requests. With keys:
 - **Why several:** each key has its own quota, and the client rotates through them one request at a time.
   Its pacing (`--rate-limit`, per key) scales with the number of keys.
 - **Why a separate file:** keys must never be committed. `glacier_api_keys.txt` is in `.gitignore`. An
-  earlier version of this code hardcoded shared keys; none of them work any more. Only use keys whose
-  owners have agreed.
+  earlier version of this code hardcoded shared keys in source. Only use keys whose owners have agreed.
 - **Getting a key:** https://build.avax.network/console/utilities/data-api-keys
-- **An invalid key fails the request** with HTTP 400 (`Api key is invalid`), and the client doesn't fall back
-  to unauthenticated. Remove dead keys from the file.
+- **Host:** the client uses `glacier-api.avax.network`. Existing keys are rejected by the newer
+  `data-api.avax.network` host with HTTP 400 (`Api key is invalid`), even though both serve the same API.
+  A key that fails the same way on `glacier-api` is revoked: remove it from the file, since the client
+  doesn't fall back to unauthenticated.
 
 ## Usage
 

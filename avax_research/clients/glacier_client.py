@@ -49,7 +49,9 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
-GLACIER_BASE_URL = "https://data-api.avax.network"
+# Both hosts serve the same API, but existing keys are only accepted by glacier-api (data-api answers
+# "Api key is invalid" for them, checked 2026-09-13). Unauthenticated requests work on either.
+GLACIER_BASE_URL = "https://glacier-api.avax.network"
 
 
 @dataclass
