@@ -1,0 +1,13 @@
+# API keys: never commit (see README, "API keys")
+glacier_api_keys.txt
+*.env
+
+# Downloaded genesis, API cache, trace results and checkpoints (all regenerated locally)
+data/
+
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+dist/

@@ -1,0 +1,7 @@
+# Glacier (Avalanche Data API) keys, one per line. Copy this file to glacier_api_keys.txt, which is
+# gitignored, and never commit real keys. Get a key at https://build.avax.network/console/utilities/data-api-keys
+#
+# Each key has its own rate limit and the tracer rotates through them, so more keys trace faster.
+# Only add keys you are allowed to use. A trailing "# note" is fine, e.g. whose key it is.
+#
+# ac_your_key_here   # me

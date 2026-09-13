@@ -1,0 +1,41 @@
+[project]
+name = "avax-genesis-research"
+version = "0.1.0"
+description = "Trace AVAX across the P, X and C chains back to, and forward from, Avalanche genesis allocations"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "glacier-client @ git+https://github.com/tactical-retreat/glacier-client@a3426e7",
+    "httpx>=0.27",
+    "pycryptodome>=3.20",
+]
+
+[project.scripts]
+avax-trace = "avax_research.cli.trace:main"
+avax-report = "avax_research.cli.report:main"
+avax-fetch-genesis = "avax_research.cli.fetch_genesis:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.11.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "avax_research"
+module-root = ""
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Carried over from the original toolkit: unused locals that may mark unfinished logic; left for review.
+"avax_research/tracer/bfs_tracer.py" = ["F841"]
+"avax_research/tracer/genesis_forward.py" = ["F841"]
