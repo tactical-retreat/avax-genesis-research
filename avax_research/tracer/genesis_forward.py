@@ -389,8 +389,8 @@ class GenesisForwardTracer:
                     )
                     next_depth_items.extend(new_items)
                 except Exception as e:
-                    logger.warning(f"Error processing {item.address.p_address}: {e}")
-                    errors.append(f"Error at {item.address.p_address}: {str(e)}")
+                    logger.warning(f"Error processing {item.address}: {e}")
+                    errors.append(f"Error at {item.address}: {str(e)}")
 
             max_depth_reached = max(max_depth_reached, current_depth)
 
@@ -508,8 +508,8 @@ class GenesisForwardTracer:
                         heapq.heappush(heap, (not_cached, -new_item.amount_avax, new_item.depth, counter, new_item))
                         counter += 1
             except Exception as e:
-                logger.warning(f"Error processing {item.address.p_address}: {e}")
-                errors.append(f"Error at {item.address.p_address}: {str(e)}")
+                logger.warning(f"Error processing {item.address}: {e}")
+                errors.append(f"Error at {item.address}: {str(e)}")
 
             # Checkpoint at intervals
             if config.checkpoint_path and addresses_since_checkpoint >= config.checkpoint_interval * 100:
@@ -742,11 +742,7 @@ class GenesisForwardTracer:
                     address, tx_types=tx_types, max_pages=10
                 ):
                     # Only outgoing (address is in from_addresses)
-                    addr_strs = {
-                        address.p_address.lower(),
-                        address.x_address.lower(),
-                        address.x_address.lower().replace("x-", ""),
-                    }
+                    addr_strs = address.match_strings
                     from_strs = {a.lower() for a in tx.from_addresses}
                     if addr_strs & from_strs:
                         yield tx
@@ -754,16 +750,12 @@ class GenesisForwardTracer:
                 for tx in self.glacier.get_x_chain_transactions(
                     address, tx_types=tx_types, max_pages=10
                 ):
-                    addr_strs = {
-                        address.p_address.lower(),
-                        address.x_address.lower(),
-                        address.x_address.lower().replace("x-", ""),
-                    }
+                    addr_strs = address.match_strings
                     from_strs = {a.lower() for a in tx.from_addresses}
                     if addr_strs & from_strs:
                         yield tx
         except Exception as e:
-            logger.warning(f"Error getting {chain}-chain txs for {address.p_address}: {e}")
+            logger.warning(f"Error getting {chain}-chain txs for {address}: {e}")
 
     def _find_c_chain_destinations(
         self,
@@ -779,17 +771,12 @@ class GenesisForwardTracer:
                 intermediate_addr = AvaxAddress.from_any(to_addr_str)
 
                 # Query C-chain atomic transactions for ImportTx
-                bech32_addr = intermediate_addr.x_address.replace("X-", "")
+                bech32_addr = intermediate_addr.bech32
                 for atomic_tx in self.glacier.get_c_chain_atomic_transactions(
                     bech32_addr, tx_types=["ImportTx"], max_pages=5
                 ):
                     # Check if source matches
-                    target_strs = {
-                        intermediate_addr.c_address.lower(),
-                        intermediate_addr.x_address.lower(),
-                        intermediate_addr.p_address.lower(),
-                        intermediate_addr.x_address.lower().replace("x-", ""),
-                    }
+                    target_strs = intermediate_addr.match_strings
                     from_strs = {a.lower() for a in atomic_tx.from_addresses}
 
                     if target_strs & from_strs:

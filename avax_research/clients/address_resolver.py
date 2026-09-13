@@ -47,7 +47,6 @@ class AddressResolver:
             genesis_csv_path: Path to all_allocations.csv for genesis lookup
         """
         self._genesis_by_address: dict[AvaxAddress, GenesisAllocation] = {}
-        self._genesis_by_c_address: dict[str, GenesisAllocation] = {}
         self._genesis_by_category: dict[str, list[GenesisAllocation]] = {}
 
         if genesis_csv_path:
@@ -68,7 +67,6 @@ class AddressResolver:
                         continue
 
                     addr = AvaxAddress.from_x_address(x_addr)
-                    c_addr = addr.c_address
 
                     allocation = GenesisAllocation(
                         address=addr,
@@ -85,7 +83,6 @@ class AddressResolver:
                     )
 
                     self._genesis_by_address[addr] = allocation
-                    self._genesis_by_c_address[c_addr] = allocation
 
                     if allocation.category:
                         if allocation.category not in self._genesis_by_category:
@@ -176,6 +173,9 @@ class AddressResolver:
 
         Returns:
             Address in the target chain's format
+
+        Raises:
+            ValueError: converting between a C-Chain and a P/X address, which are different hashes of a key
         """
         avax_addr = AvaxAddress.from_any(address)
         return avax_addr.for_chain(to_chain)
@@ -183,20 +183,17 @@ class AddressResolver:
     @staticmethod
     def get_all_formats(address: str) -> dict[str, str]:
         """
-        Get an address in all three formats.
+        Get an address in every format it has: "C" for a C-Chain address, "X" and "P" for a P/X address.
 
         Args:
             address: Address in any format
 
         Returns:
-            Dict with keys "C", "X", "P" mapping to formatted addresses
+            Dict mapping chain letter to formatted address
         """
         avax_addr = AvaxAddress.from_any(address)
-        return {
-            "C": avax_addr.c_address,
-            "X": avax_addr.x_address,
-            "P": avax_addr.p_address,
-        }
+        formats = {"C": avax_addr.c_address, "X": avax_addr.x_address, "P": avax_addr.p_address}
+        return {chain: value for chain, value in formats.items() if value}
 
     def genesis_summary(self) -> dict:
         """Get a summary of loaded genesis data."""

@@ -445,7 +445,7 @@ Examples:
                     for dest in dest_result.c_chain_destinations[:30]:
                         balance_str = f"{dest.current_balance_avax:,.2f}" if dest.current_balance_avax is not None else "N/A"
                         print(
-                            f"{dest.address.c_address:<44} "
+                            f"{str(dest.address):<44} "
                             f"{dest.total_received_avax:>14,.2f} "
                             f"{dest.total_sent_back_avax:>12,.2f} "
                             f"{dest.net_received_avax:>14,.2f} "
@@ -493,7 +493,7 @@ Examples:
                 if related_result.related_destinations:
                     print("Top related destinations (funded by same sources):")
                     for i, dest in enumerate(related_result.related_destinations[:20]):
-                        print(f"  {i+1}. {dest.address.c_address}: {dest.total_amount_avax:.2f} AVAX")
+                        print(f"  {i+1}. {dest.address}: {dest.total_amount_avax:.2f} AVAX")
                     if len(related_result.related_destinations) > 20:
                         print(f"  ... and {len(related_result.related_destinations) - 20} more")
 
@@ -544,7 +544,7 @@ Examples:
                     for dest in dest_result.c_chain_destinations[:30]:
                         balance_str = f"{dest.current_balance_avax:,.2f}" if dest.current_balance_avax is not None else "N/A"
                         print(
-                            f"{dest.address.c_address:<44} "
+                            f"{str(dest.address):<44} "
                             f"{dest.total_received_avax:>14,.2f} "
                             f"{dest.total_sent_back_avax:>12,.2f} "
                             f"{dest.net_received_avax:>14,.2f} "

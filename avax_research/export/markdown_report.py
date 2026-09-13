@@ -103,12 +103,14 @@ class MarkdownReporter:
         f.write("## Starting Addresses\n\n")
 
         for addr in result.starting_addresses:
-            f.write(f"### `{addr.c_address}`\n\n")
+            f.write(f"### `{addr}`\n\n")
             f.write("| Format | Address |\n")
             f.write("|--------|----------|\n")
-            f.write(f"| C-Chain | `{addr.c_address}` |\n")
-            f.write(f"| P-Chain | `{addr.p_address}` |\n")
-            f.write(f"| X-Chain | `{addr.x_address}` |\n")
+            if addr.is_evm:
+                f.write(f"| C-Chain | `{addr.c_address}` |\n")
+            else:
+                f.write(f"| P-Chain | `{addr.p_address}` |\n")
+                f.write(f"| X-Chain | `{addr.x_address}` |\n")
 
             # Check if this is a genesis address
             for ga, match in result.genesis_matches:
@@ -148,11 +150,11 @@ class MarkdownReporter:
             # Show top 10 by allocation
             top_matches = sorted(matches, key=lambda x: x[1].total_avax, reverse=True)[:10]
 
-            f.write("| Address (C-Chain) | Total AVAX | Validator |\n")
+            f.write("| Address | Total AVAX | Validator |\n")
             f.write("|-------------------|------------|----------|\n")
             for addr, match in top_matches:
                 validator = match.node_id[:20] + "..." if match.node_id else "No"
-                f.write(f"| `{addr.c_address[:12]}...` | {match.total_avax:,.2f} | {validator} |\n")
+                f.write(f"| `{str(addr)[:14]}...` | {match.total_avax:,.2f} | {validator} |\n")
 
             if len(matches) > 10:
                 f.write(f"\n*...and {len(matches) - 10} more addresses*\n")
@@ -177,7 +179,7 @@ class MarkdownReporter:
         for node in nodes:
             category = node.genesis_category or "-"
             f.write(
-                f"| `{node.address.c_address[:12]}...` | "
+                f"| `{str(node.address)[:14]}...` | "
                 f"{node.total_received_avax:,.2f} | "
                 f"{category} | {node.depth} |\n"
             )
@@ -200,7 +202,7 @@ class MarkdownReporter:
                 continue
             category = node.genesis_category or "-"
             f.write(
-                f"| `{node.address.c_address[:12]}...` | "
+                f"| `{str(node.address)[:14]}...` | "
                 f"{node.total_sent_avax:,.2f} | "
                 f"{category} | {node.depth} |\n"
             )

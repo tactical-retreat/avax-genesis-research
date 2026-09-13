@@ -1,10 +1,16 @@
 """
-Avalanche address model with X/P/C format conversion.
+Avalanche address model.
 
 Address formats:
-- C-Chain: 0x... (20-byte hex, Ethereum compatible)
-- X-Chain: X-avax1... (Bech32 encoded)
-- P-Chain: P-avax1... (Bech32 encoded, same underlying address as X)
+- C-Chain: 0x... (Ethereum address: keccak256(public key)[-20:])
+- X-Chain: X-avax1... (bech32 of ripemd160(sha256(compressed public key)))
+- P-Chain: P-avax1... (the same 20 bytes as the X-Chain address)
+
+P and X addresses with the same bech32 suffix are the same owner. A C-Chain address is a different
+hash of the key, so it cannot be converted to or from a P/X address: re-encoding the 20 bytes names
+an unrelated address. `AvaxAddress` therefore records which family it belongs to, and only offers the
+formats that are real for it. The two are linked by a public key (signer credentials in X-Chain and
+C-Chain transactions), not by their bytes.
 """
 
 from dataclasses import dataclass, field
@@ -106,22 +112,26 @@ def bech32_encode(hrp: str, data: bytes) -> str:
     return hrp + "1" + "".join(BECH32_CHARSET[d] for d in converted + checksum)
 
 
+class AddressKind(Enum):
+    """Which address family a 20-byte address belongs to."""
+    EVM = "evm"  # C-Chain
+    PRIMARY = "primary"  # P-Chain and X-Chain
+
+
 @dataclass(frozen=True)
 class AvaxAddress:
     """
-    Avalanche address with support for all three chain formats.
-
-    The underlying address is stored as 20 bytes. X and P chain addresses
-    with the same suffix (after avax1) represent the same key.
+    An Avalanche address: 20 bytes plus the family they belong to.
 
     Examples:
-        >>> addr = AvaxAddress.from_c_address("0x6f9bcc68976650daffece88546f3be45f252e1eb")
+        >>> addr = AvaxAddress.from_any("P-avax1d7duc6yhvegd4llvazz5dua7ghe99c0tfqu5tr")
         >>> addr.x_address
         'X-avax1d7duc6yhvegd4llvazz5dua7ghe99c0tfqu5tr'
-        >>> addr.p_address
-        'P-avax1d7duc6yhvegd4llvazz5dua7ghe99c0tfqu5tr'
+        >>> addr.c_address  # no C-Chain form: that would be a different address
+        ''
     """
     raw_bytes: bytes = field(repr=False)
+    kind: AddressKind
 
     def __post_init__(self) -> None:
         if len(self.raw_bytes) != 20:
@@ -129,91 +139,94 @@ class AvaxAddress:
 
     @classmethod
     def from_c_address(cls, address: str) -> Self:
-        """Create from C-chain (0x...) address."""
+        """Create from a C-Chain (0x...) address."""
         if address.startswith("0x"):
             address = address[2:]
         if len(address) != 40:
             raise ValueError(f"Invalid C-chain address length: {len(address)}")
-        return cls(bytes.fromhex(address))
+        return cls(bytes.fromhex(address), AddressKind.EVM)
 
     @classmethod
     def from_x_address(cls, address: str) -> Self:
-        """Create from X-chain (X-avax1...) address."""
+        """Create from an X-Chain (X-avax1...) or bare (avax1...) address."""
         if address.startswith("X-"):
             address = address[2:]
         hrp, data = bech32_decode(address)
         if hrp != "avax" or data is None:
             raise ValueError(f"Invalid X-chain address: {address}")
-        return cls(data)
+        return cls(data, AddressKind.PRIMARY)
 
     @classmethod
     def from_p_address(cls, address: str) -> Self:
-        """Create from P-chain (P-avax1...) address."""
+        """Create from a P-Chain (P-avax1...) or bare (avax1...) address."""
         if address.startswith("P-"):
             address = address[2:]
         hrp, data = bech32_decode(address)
         if hrp != "avax" or data is None:
             raise ValueError(f"Invalid P-chain address: {address}")
-        return cls(data)
+        return cls(data, AddressKind.PRIMARY)
 
     @classmethod
     def from_any(cls, address: str) -> Self:
-        """Parse address in any format (auto-detect)."""
+        """Parse an address in any format; the format decides the family."""
         address = address.strip()
         if address.startswith("0x"):
             return cls.from_c_address(address)
-        elif address.startswith("X-"):
+        if address.startswith("X-"):
             return cls.from_x_address(address)
-        elif address.startswith("P-"):
+        if address.startswith("P-"):
             return cls.from_p_address(address)
-        elif address.startswith("avax1"):
-            # Bech32 without chain prefix, assume X-chain
-            hrp, data = bech32_decode(address)
-            if hrp != "avax" or data is None:
-                raise ValueError(f"Invalid Avalanche address: {address}")
-            return cls(data)
-        else:
-            # Try as hex without 0x prefix
+        if address.startswith("avax1"):
+            return cls.from_x_address(address)
+        if len(address) == 40:
             try:
-                if len(address) == 40:
-                    return cls(bytes.fromhex(address))
+                return cls(bytes.fromhex(address), AddressKind.EVM)
             except ValueError:
                 pass
-            raise ValueError(f"Unknown address format: {address}")
+        raise ValueError(f"Unknown address format: {address}")
+
+    @property
+    def is_evm(self) -> bool:
+        return self.kind is AddressKind.EVM
+
+    @property
+    def is_primary(self) -> bool:
+        return self.kind is AddressKind.PRIMARY
 
     @property
     def c_address(self) -> str:
-        """Get C-chain format (0x...)."""
-        return "0x" + self.raw_bytes.hex()
+        """C-Chain form (0x...), or "" for a P/X address."""
+        return "0x" + self.raw_bytes.hex() if self.is_evm else ""
+
+    @property
+    def bech32(self) -> str:
+        """Bare bech32 (avax1...), as the Data API returns P/X addresses; "" for a C-Chain address."""
+        return bech32_encode("avax", self.raw_bytes) if self.is_primary else ""
 
     @property
     def x_address(self) -> str:
-        """Get X-chain format (X-avax1...)."""
-        return "X-" + bech32_encode("avax", self.raw_bytes)
+        """X-Chain form (X-avax1...), or "" for a C-Chain address."""
+        return "X-" + self.bech32 if self.is_primary else ""
 
     @property
     def p_address(self) -> str:
-        """Get P-chain format (P-avax1...)."""
-        return "P-" + bech32_encode("avax", self.raw_bytes)
+        """P-Chain form (P-avax1...), or "" for a C-Chain address."""
+        return "P-" + self.bech32 if self.is_primary else ""
+
+    @property
+    def match_strings(self) -> set[str]:
+        """Lowercase forms this address can appear as in API responses."""
+        if self.is_evm:
+            return {self.c_address.lower()}
+        return {self.bech32, self.x_address.lower(), self.p_address.lower()}
 
     def for_chain(self, chain: Chain) -> str:
-        """Get address in the format for a specific chain."""
-        if chain == Chain.C:
-            return self.c_address
-        elif chain == Chain.X:
-            return self.x_address
-        elif chain == Chain.P:
-            return self.p_address
-        raise ValueError(f"Unknown chain: {chain}")
+        """The address in a chain's format. Raises ValueError across families (C versus P/X)."""
+        value = {Chain.C: self.c_address, Chain.X: self.x_address, Chain.P: self.p_address}[chain]
+        if not value:
+            raise ValueError(f"{self} has no {chain.value}-Chain form")
+        return value
 
     def __str__(self) -> str:
-        """Default string representation uses C-chain format."""
-        return self.c_address
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, AvaxAddress):
-            return self.raw_bytes == other.raw_bytes
-        return False
-
-    def __hash__(self) -> int:
-        return hash(self.raw_bytes)
+        """0x... for C-Chain addresses, avax1... for P/X addresses."""
+        return self.c_address or self.bech32

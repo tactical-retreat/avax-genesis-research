@@ -315,10 +315,11 @@ class GlacierClient:
         Returns:
             List of chain IDs (e.g., ["p-chain", "x-chain"])
         """
-        if isinstance(address, AvaxAddress):
-            addr_str = address.p_address  # Use P-chain format for the API
-        else:
-            addr_str = address
+        if isinstance(address, str):
+            address = AvaxAddress.from_any(address)
+        if not address.is_primary:
+            return []  # the endpoint takes P/X addresses only
+        addr_str = address.p_address
 
         # Check cache
         cached = self._cache.get("chain_ids", addr_str)
@@ -366,10 +367,11 @@ class GlacierClient:
         Yields:
             TransactionRecord for each transaction
         """
-        if isinstance(address, AvaxAddress):
-            addr_str = address.p_address
-        else:
-            addr_str = AvaxAddress.from_any(address).p_address
+        if isinstance(address, str):
+            address = AvaxAddress.from_any(address)
+        if not address.is_primary:
+            return  # a C-Chain address has no P-Chain transactions
+        addr_str = address.p_address
 
         # Build deterministic cache key - sort tx_types for consistency
         tx_types_str = ",".join(sorted(tx_types)) if tx_types else ""
@@ -466,10 +468,11 @@ class GlacierClient:
         Yields:
             TransactionRecord for each transaction
         """
-        if isinstance(address, AvaxAddress):
-            addr_str = address.x_address
-        else:
-            addr_str = AvaxAddress.from_any(address).x_address
+        if isinstance(address, str):
+            address = AvaxAddress.from_any(address)
+        if not address.is_primary:
+            return  # a C-Chain address has no X-Chain transactions
+        addr_str = address.x_address
 
         # Build deterministic cache key - sort tx_types for consistency
         tx_types_str = ",".join(sorted(tx_types)) if tx_types else ""
@@ -558,10 +561,11 @@ class GlacierClient:
         Yields:
             TransactionRecord for each transaction
         """
-        if isinstance(address, AvaxAddress):
-            addr_str = address.c_address
-        else:
-            addr_str = AvaxAddress.from_any(address).c_address
+        if isinstance(address, str):
+            address = AvaxAddress.from_any(address)
+        if not address.is_evm:
+            return  # a P/X address has no C-Chain EVM transactions
+        addr_str = address.c_address
 
         cache_key = f"{addr_str}:native"
 
@@ -679,10 +683,9 @@ class GlacierClient:
         Returns:
             Dict mapping chain to balance in nanoAVAX
         """
-        if isinstance(address, AvaxAddress):
-            addr = address
-        else:
-            addr = AvaxAddress.from_any(address)
+        addr = address if isinstance(address, AvaxAddress) else AvaxAddress.from_any(address)
+        if not addr.is_primary:
+            return {}  # P/X balances only
 
         try:
             response = self._call_with_retry(
@@ -690,10 +693,10 @@ class GlacierClient:
                 network=self.network,
                 addresses=addr.p_address,  # P and X use same address
                 client=self._client,
-                operation=f"get_balances({addr.c_address[:12]}...)",
+                operation=f"get_balances({str(addr)[:16]}...)",
             )
         except RateLimitError:
-            logger.error(f"Rate limit exhausted fetching balances for {addr.c_address}")
+            logger.error(f"Rate limit exhausted fetching balances for {addr}")
             return {}
 
         balances: dict[str, int] = {}
@@ -853,18 +856,14 @@ class GlacierClient:
         Yields:
             TransactionRecord for each transaction
         """
-        if isinstance(address, AvaxAddress):
-            # Use checksum address for Glacier C-chain atomic endpoint
+        # The endpoint indexes atomic transactions by both sides: the 0x EVM input/output addresses and the
+        # bech32 owners of the P/X UTXOs they consume or create.
+        if isinstance(address, str):
+            address = AvaxAddress.from_any(address)
+        if address.is_evm:
             addr_str = self._to_checksum_address(address.c_address)
-        elif isinstance(address, str) and address.startswith("0x"):
-            # Preserve original case or convert to checksum
-            addr_str = self._to_checksum_address(address)
-        elif isinstance(address, str) and address.startswith("avax1"):
-            # Bech32 format - use directly (for querying by X/P chain source address)
-            # The API indexes ImportTx by the bech32 addresses in consumedUtxos
-            addr_str = address
         else:
-            addr_str = self._to_checksum_address(AvaxAddress.from_any(address).c_address)
+            addr_str = address.bech32
 
         # Build deterministic cache key - sort tx_types for consistency
         tx_types_str = ",".join(sorted(tx_types)) if tx_types else ""
@@ -1008,10 +1007,11 @@ class GlacierClient:
         Returns:
             True if cached data exists
         """
-        if isinstance(address, AvaxAddress):
-            addr_str = address.p_address
-        else:
-            addr_str = AvaxAddress.from_any(address).p_address
+        if isinstance(address, str):
+            address = AvaxAddress.from_any(address)
+        if not address.is_primary:
+            return False
+        addr_str = address.p_address
 
         if tx_types is None:
             tx_types = ["BaseTx", "ExportTx", "ImportTx"]

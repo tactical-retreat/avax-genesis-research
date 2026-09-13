@@ -23,7 +23,7 @@ CATEGORY_COLORS = {
 
 def _short_addr(addr: AvaxAddress) -> str:
     """Get short form of address for display."""
-    return addr.c_address[:8] + "..."
+    return str(addr)[:10] + "..."
 
 
 def _get_node_color(category: str | None) -> str:
@@ -212,7 +212,7 @@ class GraphVizExporter:
     def _mermaid_id(self, addr: AvaxAddress) -> str:
         """Generate a valid Mermaid node ID."""
         # Use first 8 chars of hex address
-        return "n" + addr.c_address[2:10]
+        return ("e" if addr.is_evm else "p") + addr.raw_bytes.hex()[:8]
 
     def export_graphviz(
         self,
@@ -336,7 +336,7 @@ class GraphVizExporter:
 
     def _graphviz_id(self, addr: AvaxAddress) -> str:
         """Generate a valid Graphviz node ID."""
-        return "n" + addr.c_address[2:10]
+        return ("e" if addr.is_evm else "p") + addr.raw_bytes.hex()[:8]
 
     def export_mermaid_markdown(
         self,

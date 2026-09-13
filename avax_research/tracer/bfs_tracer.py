@@ -131,7 +131,7 @@ class RelatedDestinationsResult:
     def summary(self) -> dict:
         """Get a summary of the related destinations result."""
         return {
-            "starting_address": self.starting_address.c_address,
+            "starting_address": str(self.starting_address),
             "starting_addresses": 1,  # For compatibility with report templates
             "funding_sources_found": len(self.funding_sources),
             "related_destinations_found": len(self.related_destinations),
@@ -175,7 +175,7 @@ class TraceDestinationsResult:
     def summary(self) -> dict:
         """Get a summary of the destinations result."""
         return {
-            "starting_address": self.starting_address.c_address,
+            "starting_address": str(self.starting_address),
             "starting_addresses": 1,  # For compatibility with report templates
             "total_destinations": len(self.destinations),
             "c_chain_destinations": len(self.c_chain_destinations),
@@ -331,7 +331,7 @@ class BFSTracer:
 
             if progress_callback:
                 amt_str = f"{amount:.2f} AVAX" if amount > 0 else "start"
-                progress_callback(depth, len(visited), f"Processing {current_addr.c_address[:10]}... ({amt_str})")
+                progress_callback(depth, len(visited), f"Processing {str(current_addr)[:12]}... ({amt_str})")
 
             # Check depth limit
             if depth >= config.max_depth:
@@ -361,7 +361,7 @@ class BFSTracer:
                     incoming_with_amounts = incoming_with_amounts[:config.max_addresses_per_depth]
                     errors.append(
                         f"Truncated incoming addresses at depth {depth} "
-                        f"for {current_addr.c_address}"
+                        f"for {current_addr}"
                     )
 
                 # Add new addresses to priority queue (sorted by amount)
@@ -381,8 +381,8 @@ class BFSTracer:
                             genesis_matches.append((addr, match))
 
             except Exception as e:
-                logger.error(f"Error tracing {current_addr.c_address}: {e}")
-                errors.append(f"Error at {current_addr.c_address}: {str(e)}")
+                logger.error(f"Error tracing {current_addr}: {e}")
+                errors.append(f"Error at {current_addr}: {str(e)}")
 
         # Update node depths
         for addr, d in self._calculate_depths(graph, start_addrs):
@@ -442,7 +442,7 @@ class BFSTracer:
                     for src, amt in sources:
                         add_incoming(src, amt)
             except Exception as e:
-                logger.warning(f"Error getting C-chain txs for {address.c_address}: {e}")
+                logger.warning(f"Error getting C-chain txs for {address}: {e}")
 
         if Chain.P in config.chains:
             try:
@@ -460,7 +460,7 @@ class BFSTracer:
                         self.linker.process_transaction(tx)
 
             except Exception as e:
-                logger.warning(f"Error getting P-chain txs for {address.p_address}: {e}")
+                logger.warning(f"Error getting P-chain txs for {address}: {e}")
 
         if Chain.X in config.chains:
             try:
@@ -477,7 +477,7 @@ class BFSTracer:
                         self.linker.process_transaction(tx)
 
             except Exception as e:
-                logger.warning(f"Error getting X-chain txs for {address.x_address}: {e}")
+                logger.warning(f"Error getting X-chain txs for {address}: {e}")
 
         return list(incoming_amounts.values())
 
@@ -496,13 +496,7 @@ class BFSTracer:
 
         # Include all address formats for matching, including non-prefixed bech32
         # (API returns addresses without X-/P- prefix like "avax1...")
-        bech32_no_prefix = target_addr.x_address.lower().replace("x-", "")
-        target_strs = {
-            target_addr.c_address.lower(),
-            target_addr.x_address.lower(),
-            target_addr.p_address.lower(),
-            bech32_no_prefix,  # avax1... format without chain prefix
-        }
+        target_strs = target_addr.match_strings
 
         # Determine if this transaction sends TO our target
         # (meaning funds came FROM the from_addresses)
@@ -695,8 +689,8 @@ class BFSTracer:
                         ))
 
             except Exception as e:
-                logger.warning(f"Error getting destinations from {source_addr.c_address}: {e}")
-                errors.append(f"Error tracing from source {source_addr.c_address}: {str(e)}")
+                logger.warning(f"Error getting destinations from {source_addr}: {e}")
+                errors.append(f"Error tracing from source {source_addr}: {str(e)}")
 
         # Sort related destinations by amount
         related_destinations.sort(key=lambda x: x.total_amount_avax, reverse=True)
@@ -776,7 +770,7 @@ class BFSTracer:
                     for tgt, amt in targets:
                         add_outgoing(tgt, amt)
             except Exception as e:
-                logger.warning(f"Error getting C-chain txs for {address.c_address}: {e}")
+                logger.warning(f"Error getting C-chain txs for {address}: {e}")
 
         if Chain.P in config.chains:
             try:
@@ -802,7 +796,7 @@ class BFSTracer:
                                 source_chain="P",
                                 dest_chain=tx.destination_chain[:1] if tx.destination_chain else "P",
                                 source_address=address.p_address,
-                                dest_address=tgt.p_address if tx.tx_type == "ExportTx" else tgt.c_address,
+                                dest_address=tgt.p_address or str(tgt),
                                 amount_avax=amt,
                                 timestamp=tx.timestamp,
                                 block_height=tx.block_number,
@@ -823,7 +817,7 @@ class BFSTracer:
                             add_outgoing(tgt, amt)
 
             except Exception as e:
-                logger.warning(f"Error getting P-chain txs for {address.p_address}: {e}")
+                logger.warning(f"Error getting P-chain txs for {address}: {e}")
 
         if Chain.X in config.chains:
             try:
@@ -849,7 +843,7 @@ class BFSTracer:
                                 source_chain="X",
                                 dest_chain=tx.destination_chain[:1] if tx.destination_chain else "X",
                                 source_address=address.x_address,
-                                dest_address=tgt.x_address if tx.tx_type == "ExportTx" else tgt.c_address,
+                                dest_address=tgt.x_address or str(tgt),
                                 amount_avax=amt,
                                 timestamp=tx.timestamp,
                                 block_height=tx.block_number,
@@ -870,7 +864,7 @@ class BFSTracer:
                             add_outgoing(tgt, amt)
 
             except Exception as e:
-                logger.warning(f"Error getting X-chain txs for {address.x_address}: {e}")
+                logger.warning(f"Error getting X-chain txs for {address}: {e}")
 
         return list(outgoing_amounts.values())
 
@@ -904,7 +898,7 @@ class BFSTracer:
             try:
                 # Query C-chain atomic transactions using bech32 format
                 # The API indexes by the bech32 addresses in consumedUtxos
-                bech32_addr = target_addr.x_address.replace("X-", "")  # avax1...
+                bech32_addr = target_addr.bech32  # avax1...
                 for atomic_tx in self.glacier.get_c_chain_atomic_transactions(
                     bech32_addr, tx_types=["ImportTx"], max_pages=5
                 ):
@@ -914,12 +908,7 @@ class BFSTracer:
                         continue
 
                     # Check if the ImportTx source matches our intermediate target
-                    target_strs = {
-                        target_addr.c_address.lower(),
-                        target_addr.x_address.lower(),
-                        target_addr.p_address.lower(),
-                        target_addr.x_address.lower().replace("x-", ""),
-                    }
+                    target_strs = target_addr.match_strings
                     from_strs = {a.lower() for a in atomic_tx.from_addresses}
 
                     if target_strs & from_strs:
@@ -959,7 +948,7 @@ class BFSTracer:
                             except ValueError:
                                 continue
             except Exception as e:
-                logger.warning(f"Error finding C-chain import for {target_addr.c_address}: {e}")
+                logger.warning(f"Error finding C-chain import for {target_addr}: {e}")
 
         return result
 
@@ -977,13 +966,7 @@ class BFSTracer:
         result: list[tuple[AvaxAddress, float]] = []
 
         # Include all address formats for matching, including non-prefixed bech32
-        bech32_no_prefix = source_addr.x_address.lower().replace("x-", "")
-        source_strs = {
-            source_addr.c_address.lower(),
-            source_addr.x_address.lower(),
-            source_addr.p_address.lower(),
-            bech32_no_prefix,  # avax1... format without chain prefix
-        }
+        source_strs = source_addr.match_strings
 
         # Determine if this transaction is FROM our source
         from_addrs_lower = {a.lower() for a in tx.from_addresses}
@@ -1101,7 +1084,7 @@ class BFSTracer:
 
             if progress_callback:
                 amt_str = f"{amount:.2f} AVAX" if amount > 0 else "start"
-                progress_callback(depth, len(visited), f"Forward: {current_addr.c_address[:10]}... ({amt_str})")
+                progress_callback(depth, len(visited), f"Forward: {str(current_addr)[:12]}... ({amt_str})")
 
             if depth >= config.max_depth:
                 continue
@@ -1157,8 +1140,8 @@ class BFSTracer:
                         counter += 1
 
             except Exception as e:
-                logger.error(f"Error tracing forward from {current_addr.c_address}: {e}")
-                errors.append(f"Error at {current_addr.c_address}: {str(e)}")
+                logger.error(f"Error tracing forward from {current_addr}: {e}")
+                errors.append(f"Error at {current_addr}: {str(e)}")
 
         # Now trace incoming to calculate sent_back amounts
         # (what each destination sent back toward the source)
@@ -1235,7 +1218,7 @@ class BFSTracer:
                     balance = self._get_c_chain_balance(dest.address)
                     dest.current_balance_avax = balance
                 except Exception as e:
-                    logger.warning(f"Error fetching balance for {dest.address.c_address}: {e}")
+                    logger.warning(f"Error fetching balance for {dest.address}: {e}")
 
         return TraceDestinationsResult(
             starting_address=source,
@@ -1304,7 +1287,7 @@ class BFSTracer:
         heapq.heappush(queue, (float('-inf'), 0, counter, source))
         counter += 1
 
-        print(f"\nStreaming C-chain exports from {source.p_address}")
+        print(f"\nStreaming C-chain exports from {source}")
         print(f"Max depth {config.max_depth}")
         print()
 
@@ -1384,11 +1367,7 @@ class BFSTracer:
 
                     # Add recipients to queue (for non-export or export to other chains)
                     from_strs = {a.lower() for a in tx.from_addresses}
-                    addr_strs = {
-                        current_addr.p_address.lower(),
-                        current_addr.x_address.lower(),
-                        current_addr.x_address.lower().replace("x-", ""),
-                    }
+                    addr_strs = current_addr.match_strings
 
                     if addr_strs & from_strs:
                         for to_addr in tx.to_addresses:
@@ -1408,7 +1387,7 @@ class BFSTracer:
                                 continue
 
             except Exception as e:
-                logger.warning(f"Error querying P-chain for {current_addr.p_address}: {e}")
+                logger.warning(f"Error querying P-chain for {current_addr}: {e}")
 
             # Query X-chain transactions
             try:
@@ -1471,11 +1450,7 @@ class BFSTracer:
 
                     # Add recipients to queue and track received amounts
                     from_strs = {a.lower() for a in tx.from_addresses}
-                    addr_strs = {
-                        current_addr.p_address.lower(),
-                        current_addr.x_address.lower(),
-                        current_addr.x_address.lower().replace("x-", ""),
-                    }
+                    addr_strs = current_addr.match_strings
 
                     if addr_strs & from_strs:
                         for to_addr in tx.to_addresses:
@@ -1494,7 +1469,7 @@ class BFSTracer:
                                 continue
 
             except Exception as e:
-                logger.warning(f"Error querying X-chain for {current_addr.x_address}: {e}")
+                logger.warning(f"Error querying X-chain for {current_addr}: {e}")
 
         # Final summary
         print(f"\n\nComplete! Visited {len(visited)} addresses")
@@ -1527,7 +1502,7 @@ class BFSTracer:
 
         for target_addr, amount in intermediate_targets:
             try:
-                bech32_addr = target_addr.x_address.replace("X-", "")
+                bech32_addr = target_addr.bech32
                 for atomic_tx in self.glacier.get_c_chain_atomic_transactions(
                     bech32_addr, tx_types=["ImportTx"], max_pages=5
                 ):
@@ -1538,12 +1513,7 @@ class BFSTracer:
                     if not atomic_tx.from_addresses:
                         continue
 
-                    target_strs = {
-                        target_addr.c_address.lower(),
-                        target_addr.x_address.lower(),
-                        target_addr.p_address.lower(),
-                        target_addr.x_address.lower().replace("x-", ""),
-                    }
+                    target_strs = target_addr.match_strings
                     from_strs = {a.lower() for a in atomic_tx.from_addresses}
 
                     if target_strs & from_strs:
@@ -1559,7 +1529,7 @@ class BFSTracer:
                             except ValueError:
                                 continue
             except Exception as e:
-                logger.warning(f"Error finding C-chain import for {target_addr.c_address}: {e}")
+                logger.warning(f"Error finding C-chain import for {target_addr}: {e}")
 
         return result
 
@@ -1599,9 +1569,12 @@ class BFSTracer:
         print()
         sys.stdout.flush()
 
-    def _get_c_chain_balance(self, address: AvaxAddress) -> float:
-        """Get current C-chain AVAX balance for an address (cached for 1 hour)."""
+    def _get_c_chain_balance(self, address: AvaxAddress) -> float | None:
+        """Get current C-chain AVAX balance for an address (cached for 1 hour); None for a P/X address."""
         import time
+
+        if not address.is_evm:
+            return None
 
         cache_key = address.c_address.lower()
         now = time.time()

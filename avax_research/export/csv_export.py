@@ -245,9 +245,9 @@ class CSVExporter:
                 return obj.isoformat()
             if hasattr(obj, "raw_bytes"):  # AvaxAddress
                 return {
-                    "c": obj.c_address,
-                    "p": obj.p_address,
-                    "x": obj.x_address,
+                    "c": obj.c_address or None,
+                    "p": obj.p_address or None,
+                    "x": obj.x_address or None,
                 }
             if hasattr(obj, "value"):  # Enum
                 return obj.value
@@ -264,12 +264,12 @@ class CSVExporter:
         data = {
             "summary": result.summary(),
             "starting_addresses": [
-                {"c": a.c_address, "p": a.p_address, "x": a.x_address}
+                {"c": a.c_address or None, "p": a.p_address or None, "x": a.x_address or None}
                 for a in result.starting_addresses
             ],
             "genesis_matches": [
                 {
-                    "address": {"c": a.c_address, "p": a.p_address},
+                    "address": {"c": a.c_address or None, "p": a.p_address or None},
                     "category": m.category,
                     "total_avax": m.total_avax,
                     "is_validator": m.is_validator,

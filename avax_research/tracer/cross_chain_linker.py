@@ -223,11 +223,7 @@ class CrossChainLinker:
         Returns:
             List of cross-chain transfers involving the address
         """
-        address_strs = {
-            address.c_address.lower(),
-            address.x_address.lower(),
-            address.p_address.lower(),
-        }
+        address_strs = address.match_strings
 
         transfers = []
         for tx in transactions:

@@ -113,6 +113,8 @@ class GenesisMatcher:
             except ValueError:
                 return None
 
+        if not address.is_primary:
+            return None  # genesis allocations are P/X addresses
         return self._by_raw_bytes.get(address.raw_bytes)
 
     def is_genesis(self, address: AvaxAddress | str) -> bool:

@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..models.address import AvaxAddress
+from ..models.address import AddressKind, AvaxAddress
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class GenesisAttribution:
     def from_dict(cls, d: dict[str, Any]) -> "GenesisAttribution":
         """Deserialize from dict."""
         return cls(
-            genesis_address=AvaxAddress(bytes.fromhex(d["genesis_address"])),
+            genesis_address=AvaxAddress(bytes.fromhex(d["genesis_address"]), AddressKind.PRIMARY),
             category=d["category"],
             amount_avax=d["amount_avax"],
             path_length=d["path_length"],
@@ -46,7 +46,7 @@ class GenesisAttribution:
 
 @dataclass
 class CChainDestination:
-    """A C-chain address funded from genesis."""
+    """A C-chain address funded from genesis (always an EVM address, from an ImportTx output)."""
     address: AvaxAddress
     total_avax: float
     attributions: list[GenesisAttribution]
@@ -69,7 +69,7 @@ class CChainDestination:
     def from_dict(cls, d: dict[str, Any]) -> "CChainDestination":
         """Deserialize from dict."""
         return cls(
-            address=AvaxAddress(bytes.fromhex(d["address"])),
+            address=AvaxAddress(bytes.fromhex(d["address"]), AddressKind.EVM),
             total_avax=d["total_avax"],
             attributions=[GenesisAttribution.from_dict(a) for a in d["attributions"]],
             import_tx_hashes=d["import_tx_hashes"],
@@ -108,7 +108,7 @@ class QueueItem:
     def from_dict(cls, d: dict[str, Any]) -> "QueueItem":
         """Deserialize from dict."""
         return cls(
-            address=AvaxAddress(bytes.fromhex(d["address"])),
+            address=AvaxAddress(bytes.fromhex(d["address"]), AddressKind.PRIMARY),  # queued on P or X
             amount_avax=d["amount_avax"],
             depth=d["depth"],
             attributions=[GenesisAttribution.from_dict(a) for a in d["attributions"]],

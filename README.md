@@ -74,6 +74,16 @@ By default the tracer follows value transfers only (`BaseTx`, `ExportTx`, `Impor
 `--include-staking` for the rest), follows cross-chain export/import pairs, and treats outputs back to an
 input address as change.
 
+## Addresses
+
+A P-Chain and an X-Chain address with the same `avax1...` suffix are the same owner, and the tracer treats
+them as one node. A C-Chain `0x...` address is a different hash of a key (`keccak256(pubkey)[-20:]` versus
+`ripemd160(sha256(pubkey))`), so it can't be converted to or from a P/X address. `AvaxAddress` records which
+family an address belongs to. P/X nodes have no C-Chain column in exports, and C-Chain nodes have no P/X
+columns. C-Chain queries only go to C-Chain addresses, P/X queries only to P/X addresses, and
+C-Chain atomic lookups use whichever form the address really has. Hops between the two families come from
+imports and exports (`evmOutputs[].toAddress`, `evmInputs[].fromAddress`, consumed-UTXO owners).
+
 ## Layout
 
 ```
@@ -81,7 +91,7 @@ avax_research/
 ├── api_keys.py               # key lookup: env, then glacier_api_keys.txt
 ├── clients/glacier_client.py # sync wrapper over glacier_client: pagination, 429 backoff, key rotation, cache
 ├── clients/address_resolver.py
-├── models/address.py         # AvaxAddress (see Known issues)
+├── models/address.py         # AvaxAddress: C-Chain or P/X, never converted between (see Addresses)
 ├── models/graph.py           # trace graph
 ├── tracer/bfs_tracer.py      # backward/forward/related tracing
 ├── tracer/genesis_forward.py # from-genesis tracing (bfs/greedy/hybrid) with checkpoints
@@ -94,24 +104,6 @@ avax_research/
 
 ## Known issues
 
-- **`0x` labels on P/X addresses are not real C-Chain addresses.** `AvaxAddress` stores 20 bytes and prints them as
-  `0x...`, `X-avax1...` and `P-avax1...`. P and X really do share an address. A C-Chain address is a different
-  hash of the key (`keccak256(pubkey)[-20:]` rather than `ripemd160(sha256(pubkey))`), so the `0x` form of a
-  P/X address belongs to nobody. Verified on 2026-09-13: a traced genesis wallet labelled `0x780b...` has no
-  C-Chain activity, while its signing key's real C-Chain address is a different one.
-  - **Traces are unaffected.** Every hop comes from addresses the API returns: an import's consumed-UTXO
-    owners, `evmOutputs[].toAddress`, and P/X senders and recipients. Genesis matching uses the P/X bytes.
-    C-Chain destinations in `from-genesis`, `stream` and `destinations` come from real import outputs.
-  - **Wrong:**
-    - the `c` / "C-Chain" column for P/X nodes in `result.json`, `nodes.csv`, `edges.csv`, `genesis.csv` and the
-      Markdown reports;
-    - the node labels in Mermaid/Graphviz graphs;
-    - `dest_address` for P/X `ImportTx` rows in `cross_chain.csv`;
-    - C-Chain balance lookups for P/X destinations.
-  - **Starting from such an `0x` address** traces an empty address and finds nothing.
-  - **Missed links:** the tracer can't tell that a P/X address and a C-Chain address share an owner unless an
-    import or export connects them. Signer public keys in X/C transactions reveal it
-    (`glacier_tools.addresses_from_public_key` in glacier-client).
 - `GlacierClient` is synchronous and has its own retry and cache code. glacier-client's async `GlacierSession`
   could replace it, but the tracers are synchronous too.
 - The change heuristic only compares input and output addresses. On P-Chain exports to your own address it

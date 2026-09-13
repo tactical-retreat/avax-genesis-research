@@ -71,7 +71,7 @@ class GraphEdge:
 
     def __str__(self) -> str:
         return (
-            f"{self.source.c_address[:10]}... -> {self.target.c_address[:10]}... "
+            f"{str(self.source)[:12]}... -> {str(self.target)[:12]}... "
             f"({self.amount_avax:.4f} AVAX on {self.chain.value}-chain)"
         )
 
