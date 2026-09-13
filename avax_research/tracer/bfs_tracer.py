@@ -1292,8 +1292,8 @@ class BFSTracer:
         print()
 
         while queue:
-            neg_amount, depth, _, current_addr = heapq.heappop(queue)
-            amount = -neg_amount if neg_amount != float('-inf') else 0
+            # The heap key only orders the walk (largest flow first); amounts are filtered per transaction below.
+            _, depth, _, current_addr = heapq.heappop(queue)
 
             if current_addr.raw_bytes in visited:
                 continue

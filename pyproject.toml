@@ -34,8 +34,3 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["F", "I", "UP"]
-
-[tool.ruff.lint.per-file-ignores]
-# Carried over from the original toolkit: unused locals that may mark unfinished logic; left for review.
-"avax_research/tracer/bfs_tracer.py" = ["F841"]
-"avax_research/tracer/genesis_forward.py" = ["F841"]

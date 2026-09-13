@@ -38,10 +38,18 @@ DEFAULT_VALUE_TRANSFER_TYPES = ["BaseTx", "ExportTx", "ImportTx"]
 
 
 class TraceStrategy(Enum):
-    """Traversal strategy for forward tracing."""
-    BFS = "bfs"  # Breadth-first, iterative deepening
-    GREEDY = "greedy"  # Largest-first global priority queue
-    HYBRID = "hybrid"  # BFS to depth N, then greedy
+    """
+    Traversal order for forward tracing from genesis. All three stop at max_depth and count each ImportTx once.
+
+    BFS finishes every address at depth d before depth d+1: the most complete result for a given depth,
+    at the cost of spending the API budget on many small flows. GREEDY follows the largest flows first
+    (cached addresses first), so the big C-Chain exports show up early and a run cut short by rate limits
+    or max_total_addresses still has the flows that matter; it can miss small branches. HYBRID runs BFS to
+    hybrid_switch_depth, where fan-out is still small, then hands the unfinished frontier to GREEDY.
+    """
+    BFS = "bfs"
+    GREEDY = "greedy"
+    HYBRID = "hybrid"
 
 
 @dataclass
@@ -333,8 +341,13 @@ class GenesisForwardTracer:
         total_genesis_avax: float,
         log: Callable[[str], None],
         csv_file,
+        frontier: list[QueueItem] | None = None,
     ) -> GenesisTraceResult:
-        """BFS traversal strategy - process by depth level."""
+        """BFS traversal strategy - process by depth level.
+
+        If `frontier` is given, it receives the queued items that were not processed because they are
+        deeper than config.max_depth (the hybrid strategy continues from them).
+        """
         errors: list[str] = []
         max_depth_reached = start_depth
 
@@ -428,6 +441,15 @@ class GenesisForwardTracer:
             if len(visited) >= config.max_total_addresses:
                 break
 
+        if frontier is not None:
+            frontier.extend(
+                item
+                for depth, items in sorted(by_depth.items())
+                if depth > config.max_depth
+                for item in items
+                if item.address.raw_bytes not in visited
+            )
+
         # Build result
         total_exported = sum(d.total_avax for d in destinations.values())
         self._print_summary(destinations, log)
@@ -475,18 +497,15 @@ class GenesisForwardTracer:
 
             if item.address.raw_bytes in visited:
                 continue
+            # Check these before marking the address visited: the heap is ordered by amount, not depth, so
+            # an address can be popped first via a path that is too deep or too small and later via one
+            # that is in range.
+            if item.amount_avax < config.min_amount_avax or depth > config.max_depth:
+                continue
             visited.add(item.address.raw_bytes)
             addresses_since_checkpoint += 1
 
             max_depth_reached = max(max_depth_reached, depth)
-
-            # Skip if below minimum amount
-            if item.amount_avax < config.min_amount_avax:
-                continue
-
-            # Check limits
-            if depth > config.max_depth:
-                continue
 
             if len(visited) >= config.max_total_addresses:
                 errors.append(f"Hit max total address limit: {config.max_total_addresses}")
@@ -563,44 +582,35 @@ class GenesisForwardTracer:
             max_total_addresses=config.max_total_addresses,
         )
 
+        frontier: list[QueueItem] = []
         bfs_result = self._trace_bfs(
             queue_items, visited, destinations, processed_import_txs, bfs_config,
             start_depth, starting_addrs, total_genesis_avax,
-            log, csv_file,
+            log, csv_file, frontier=frontier,
         )
 
-        # Get remaining items at frontier
-        remaining_items: list[QueueItem] = []
-        for dest_bytes, dest in destinations.items():
-            # Re-create queue items for addresses at the frontier that can go deeper
-            pass  # This would need more tracking - for now we'll use a simpler approach
+        # Phase 2: greedy from the addresses BFS queued but did not process
+        if not frontier or len(visited) >= config.max_total_addresses:
+            return bfs_result
 
-        # Phase 2: Greedy for remaining depth
-        if bfs_result.max_depth_reached < config.max_depth:
-            log(f"\nPhase 2: Greedy from depth {bfs_result.max_depth_reached + 1}")
-
-            # Re-collect addresses at the frontier depth
-            frontier_items: list[QueueItem] = []
-            # Note: In a full implementation, we'd track which addresses are at the frontier
-            # For now, we report that the hybrid completed the BFS phase
-
-            if frontier_items:
-                greedy_config = GenesisTraceConfig(
-                    max_depth=config.max_depth,
-                    min_amount_avax=config.min_amount_avax,
-                    strategy=TraceStrategy.GREEDY,
-                    include_staking=config.include_staking,
-                    checkpoint_path=config.checkpoint_path,
-                    max_addresses_per_depth=config.max_addresses_per_depth,
-                    max_total_addresses=config.max_total_addresses - len(visited),
-                )
-
-                return self._trace_greedy(
-                    frontier_items, visited, destinations, processed_import_txs, greedy_config,
-                    starting_addrs, total_genesis_avax, log, csv_file,
-                )
-
-        return bfs_result
+        log(f"\nPhase 2: Greedy over {len(frontier)} frontier addresses, to depth {config.max_depth}")
+        greedy_config = GenesisTraceConfig(
+            max_depth=config.max_depth,
+            min_amount_avax=config.min_amount_avax,
+            strategy=TraceStrategy.GREEDY,
+            include_staking=config.include_staking,
+            checkpoint_path=config.checkpoint_path,
+            checkpoint_interval=config.checkpoint_interval,
+            max_addresses_per_depth=config.max_addresses_per_depth,
+            max_total_addresses=config.max_total_addresses,  # compared against the shared visited set
+        )
+        greedy_result = self._trace_greedy(
+            frontier, visited, destinations, processed_import_txs, greedy_config,
+            starting_addrs, total_genesis_avax, log, csv_file,
+        )
+        greedy_result.max_depth_reached = max(greedy_result.max_depth_reached, bfs_result.max_depth_reached)
+        greedy_result.errors = bfs_result.errors + greedy_result.errors
+        return greedy_result
 
     def _process_address(
         self,

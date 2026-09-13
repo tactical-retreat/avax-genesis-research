@@ -67,6 +67,14 @@ uv run avax-trace --mode from-genesis --category "40 quarterly unlocks" --strate
 uv run avax-report
 ```
 
+`--strategy` sets the order for `from-genesis`. All three stop at `--max-depth` and count each import once.
+
+- **`bfs`** (the default) finishes each depth before the next. It gives the most complete result for a
+  given depth.
+- **`greedy`** follows the largest flows first. Big exports appear early, and a run stopped by rate limits
+  keeps the flows that matter, but it can miss small branches.
+- **`hybrid`** runs BFS to `--hybrid-depth`, then continues greedily from there.
+
 `uv run avax-trace --help` lists every mode and option. Output goes to `data/results/` (CSV, JSON, Markdown,
 Mermaid, Graphviz) and API responses are cached in `data/cache/glacier_cache.db`.
 
@@ -108,11 +116,9 @@ avax_research/
   could replace it, but the tracers are synchronous too.
 - The change heuristic only compares input and output addresses. On P-Chain exports to your own address it
   can't tell change from the exported amount.
-- Two unused locals, left alone and noted in `pyproject.toml`, may mark unfinished logic:
-  `bfs_tracer.py` `amount` and `genesis_forward.py` `remaining_items`.
 
 ## Tests
 
 ```bash
-uv run pytest    # offline: imports, key loading, the genesis table, the client's key header
+uv run pytest    # offline: key loading, the genesis table, addresses, the client, the three from-genesis strategies
 ```

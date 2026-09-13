@@ -12,7 +12,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -142,7 +142,7 @@ class DiskCache:
                 (
                     key,
                     json.dumps(value),
-                    datetime.utcnow().isoformat(),
+                    datetime.now(UTC).isoformat(),
                     chain,
                     address,
                     namespace,
